@@ -103,8 +103,12 @@ async def scelta_ruolo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------- TRACKING GPS ----------------
 
 async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
+    user = update.message.from_user
     loc = update.message.location
+
+    # recupero dati salvati nella conversazione (mezzo/ruolo)
+    mezzo = context.user_data.get("mezzo", "Sconosciuto")
+    ruolo = context.user_data.get("ruolo", "Sconosciuto")
 
     conn = get_conn()
     cur = conn.cursor()
@@ -112,13 +116,19 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cur.execute("""
         INSERT INTO positions (user_id, lat, lon)
         VALUES (%s, %s, %s)
-    """, (user_id, loc.latitude, loc.longitude))
+    """, (user.id, loc.latitude, loc.longitude))
 
     conn.commit()
     cur.close()
     conn.close()
 
-    await update.message.reply_text("📍 Posizione ricevuta. Buon lavoro 👮")
+    await update.message.reply_text(
+        f"📍 Posizione ricevuta\n"
+        f"👤 Agente: {user.first_name}\n"
+        f"🚓 Mezzo: {mezzo}\n"
+        f"👮 Ruolo: {ruolo}\n\n"
+        f"Buon lavoro 👍"
+    )
 
 
 # ---------------- APP ----------------
