@@ -2,11 +2,18 @@ import os
 import psycopg2
 from datetime import datetime
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ContextTypes,
     ConversationHandler,
     filters,
@@ -28,7 +35,6 @@ def init_db():
     conn = get_conn()
     cur = conn.cursor()
 
-    # posizioni live
     cur.execute("""
         CREATE TABLE IF NOT EXISTS positions (
             id SERIAL PRIMARY KEY,
@@ -39,7 +45,6 @@ def init_db():
         );
     """)
 
-    # turni
     cur.execute("""
         CREATE TABLE IF NOT EXISTS shifts (
             id SERIAL PRIMARY KEY,
@@ -83,7 +88,13 @@ def get_turno():
         return "Notturno"
 
 
-# ---------------- COMANDI ----------------
+# ---------------- START ----------------
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👮 Bot attivo. Usa /menu per iniziare.")
+
+
+# ---------------- MENU BOTTONI ----------------
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -97,7 +108,19 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# INIZIO TURNO
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "start":
+        await query.edit_message_text("🟢 Usa /inizio per selezionare mezzo e ruolo")
+
+    elif query.data == "stop":
+        await query.edit_message_text("🔴 Usa /fine per chiudere il turno")
+
+
+# ---------------- INIZIO TURNO ----------------
+
 async def inizio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Turno attivo: {get_turno()}\nSeleziona il mezzo:",
@@ -125,7 +148,8 @@ async def scelta_ruolo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# FINE TURNO
+# ---------------- FINE TURNO ----------------
+
 async def fine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -145,7 +169,7 @@ async def fine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔴 Turno chiuso. Buon rientro 👍")
 
 
-# ---------------- GPS ----------------
+# ---------------- GPS TRACKING ----------------
 
 async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -189,8 +213,12 @@ conv_handler = ConversationHandler(
 )
 
 app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("menu", menu))
 app.add_handler(CommandHandler("fine", fine))
+
 app.add_handler(conv_handler)
+app.add_handler(CallbackQueryHandler(button_handler))
+
 app.add_handler(MessageHandler(filters.LOCATION, location_handler))
 
 init_db()
