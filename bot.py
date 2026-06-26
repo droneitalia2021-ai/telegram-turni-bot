@@ -118,7 +118,7 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cur.close()
     conn.close()
 
-    await update.message.reply_text("📍 Posizione salvata")
+    await update.message.reply_text("📍 Posizione ricevuta. Buon lavoro 👮")
 
 
 # ---------------- APP ----------------
