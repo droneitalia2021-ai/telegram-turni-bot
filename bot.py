@@ -1,5 +1,7 @@
 import os
 import psycopg2
+from datetime import datetime
+
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -25,6 +27,8 @@ def get_conn():
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
+
+    # posizioni live
     cur.execute("""
         CREATE TABLE IF NOT EXISTS positions (
             id SERIAL PRIMARY KEY,
@@ -34,12 +38,25 @@ def init_db():
             updated_at TIMESTAMP DEFAULT NOW()
         );
     """)
+
+    # turni
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS shifts (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            mezzo TEXT,
+            ruolo TEXT,
+            start_time TIMESTAMP DEFAULT NOW(),
+            active BOOLEAN DEFAULT TRUE
+        );
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
 
 
-# ---------------- DATI BOT ----------------
+# ---------------- DATI ----------------
 
 mezzi = [
     ["Zara10", "Zara20", "Beta10"],
@@ -51,10 +68,9 @@ mezzi = [
 ruoli = [["Capo Pattuglia", "Autista"]]
 
 
-# ---------------- TURNI ----------------
+# ---------------- TURNO ORARIO ----------------
 
 def get_turno():
-    from datetime import datetime
     h = datetime.now().hour
 
     if 7 <= h < 13:
@@ -67,12 +83,13 @@ def get_turno():
         return "Notturno"
 
 
-# ---------------- COMANDI BOT ----------------
+# ---------------- COMANDI ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👮 Bot attivo. Usa /inizio per iniziare il turno.")
 
 
+# INIZIO TURNO
 async def inizio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Turno attivo: {get_turno()}\nSeleziona il mezzo:",
@@ -95,18 +112,37 @@ async def scelta_ruolo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["ruolo"] = update.message.text
 
     await update.message.reply_text(
-        "📍 Ora attiva la 'Posizione in tempo reale' nel gruppo (6 ore)."
+        "📍 Ora attiva la posizione in tempo reale nel gruppo (6 ore)."
     )
     return ConversationHandler.END
 
 
-# ---------------- TRACKING GPS ----------------
+# FINE TURNO
+async def fine(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        UPDATE shifts
+        SET active = FALSE
+        WHERE user_id = %s AND active = TRUE
+    """, (user.id,))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    await update.message.reply_text("🔴 Turno chiuso. Buon rientro 👍")
+
+
+# ---------------- GPS ----------------
 
 async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     loc = update.message.location
 
-    # recupero dati salvati nella conversazione (mezzo/ruolo)
     mezzo = context.user_data.get("mezzo", "Sconosciuto")
     ruolo = context.user_data.get("ruolo", "Sconosciuto")
 
@@ -145,6 +181,7 @@ conv_handler = ConversationHandler(
 )
 
 app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("fine", fine))
 app.add_handler(conv_handler)
 app.add_handler(MessageHandler(filters.LOCATION, location_handler))
 
