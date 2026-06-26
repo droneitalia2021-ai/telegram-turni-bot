@@ -1,15 +1,10 @@
 import os
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-turni = [
-    ("07:00", "13:00", "Mattutino"),
-    ("13:00", "19:00", "Pomeridiano"),
-    ("19:00", "01:00", "Serale"),
-    ("01:00", "07:00", "Notturno")
-]
+user_data = {}
 
 mezzi = [
     ["Zara10", "Zara20", "Beta10"],
@@ -20,7 +15,6 @@ mezzi = [
 
 ruoli = [["Capo Pattuglia", "Autista"]]
 
-user_data = {}
 
 def get_turno():
     from datetime import datetime
@@ -37,14 +31,13 @@ def get_turno():
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Benvenuto 👮‍♂️\nScrivi /inizio per iniziare il turno.")
+    await update.message.reply_text("👮 Bot attivo. Usa /inizio per entrare in servizio.")
 
 
 async def inizio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = mezzi
     await update.message.reply_text(
-        f"Turno attivo: {get_turno()}\nSeleziona il mezzo:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        f"Turno: {get_turno()}\nSeleziona il mezzo:",
+        reply_markup=ReplyKeyboardMarkup(mezzi, resize_keyboard=True, one_time_keyboard=True)
     )
 
 
@@ -54,7 +47,7 @@ async def handle_mezzo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "Sei Capo Pattuglia o Autista?",
-        reply_markup=ReplyKeyboardMarkup(ruoli, one_time_keyboard=True, resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(ruoli, resize_keyboard=True, one_time_keyboard=True)
     )
 
 
@@ -63,12 +56,10 @@ async def handle_ruolo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in user_data:
         user_data[user_id]["ruolo"] = update.message.text
 
-    await update.message.reply_text(
-        "Ora condividi la tua posizione in tempo reale dal gruppo (Telegram)."
-    )
+    await update.message.reply_text("📍 Ora condividi la posizione live nel gruppo.")
 
 
-app = ApplicationBuilder().token(TOKEN).build()
+app = Application.builder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("inizio", inizio))
