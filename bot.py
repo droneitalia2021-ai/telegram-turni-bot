@@ -87,3 +87,16 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(conv_handler)
 
 app.run_polling()
+from telegram.ext import MessageHandler, filters
+
+positions = {}  # {user_id: (lat, lon)}
+
+async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    loc = update.message.location
+
+    positions[user_id] = (loc.latitude, loc.longitude)
+
+    await update.message.reply_text("📍 Posizione aggiornata in tempo reale")
+
+app.add_handler(MessageHandler(filters.LOCATION, location_handler))
