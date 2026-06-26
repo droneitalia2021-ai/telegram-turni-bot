@@ -2,7 +2,7 @@ import os
 import psycopg2
 from datetime import datetime
 
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -85,8 +85,16 @@ def get_turno():
 
 # ---------------- COMANDI ----------------
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👮 Bot attivo. Usa /inizio per iniziare il turno.")
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("🟢 Inizia turno", callback_data="start")],
+        [InlineKeyboardButton("🔴 Fine turno", callback_data="stop")]
+    ]
+
+    await update.message.reply_text(
+        "📋 Menu operativo:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 # INIZIO TURNO
