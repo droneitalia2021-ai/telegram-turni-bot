@@ -1,8 +1,17 @@
 import os
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    ConversationHandler,
+    filters,
+)
 
 TOKEN = os.getenv("BOT_TOKEN")
+
+MEZZO, RUOLO = range(2)
 
 user_data = {}
 
@@ -31,38 +40,50 @@ def get_turno():
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👮 Bot attivo. Usa /inizio per entrare in servizio.")
+    await update.message.reply_text("👮 Bot attivo. Usa /inizio per iniziare il turno.")
 
 
 async def inizio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Turno: {get_turno()}\nSeleziona il mezzo:",
-        reply_markup=ReplyKeyboardMarkup(mezzi, resize_keyboard=True, one_time_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(mezzi, resize_keyboard=True, one_time_keyboard=True),
     )
+    return MEZZO
 
 
-async def handle_mezzo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def scelta_mezzo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user_data[user_id] = {"mezzo": update.message.text}
 
     await update.message.reply_text(
         "Sei Capo Pattuglia o Autista?",
-        reply_markup=ReplyKeyboardMarkup(ruoli, resize_keyboard=True, one_time_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(ruoli, resize_keyboard=True, one_time_keyboard=True),
     )
+    return RUOLO
 
 
-async def handle_ruolo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def scelta_ruolo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    if user_id in user_data:
-        user_data[user_id]["ruolo"] = update.message.text
+    user_data[user_id]["ruolo"] = update.message.text
 
-    await update.message.reply_text("📍 Ora condividi la posizione live nel gruppo.")
+    await update.message.reply_text(
+        "📍 Ora condividi la posizione in tempo reale nel gruppo."
+    )
+    return ConversationHandler.END
 
 
 app = Application.builder().token(TOKEN).build()
 
+conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("inizio", inizio)],
+    states={
+        MEZZO: [MessageHandler(filters.TEXT & ~filters.COMMAND, scelta_mezzo)],
+        RUOLO: [MessageHandler(filters.TEXT & ~filters.COMMAND, scelta_ruolo)],
+    },
+    fallbacks=[],
+)
+
 app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("inizio", inizio))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_mezzo))
+app.add_handler(conv_handler)
 
 app.run_polling()
