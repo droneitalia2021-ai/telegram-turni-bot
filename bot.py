@@ -1,4 +1,5 @@
 import os
+import psycopg2
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -10,10 +11,35 @@ from telegram.ext import (
 )
 
 TOKEN = os.getenv("BOT_TOKEN")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 MEZZO, RUOLO = range(2)
 
-user_data = {}
+
+# ---------------- DATABASE ----------------
+
+def get_conn():
+    return psycopg2.connect(DATABASE_URL)
+
+
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS positions (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            lat DOUBLE PRECISION,
+            lon DOUBLE PRECISION,
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+# ---------------- DATI BOT ----------------
 
 mezzi = [
     ["Zara10", "Zara20", "Beta10"],
@@ -24,6 +50,8 @@ mezzi = [
 
 ruoli = [["Capo Pattuglia", "Autista"]]
 
+
+# ---------------- TURNI ----------------
 
 def get_turno():
     from datetime import datetime
@@ -39,21 +67,22 @@ def get_turno():
         return "Notturno"
 
 
+# ---------------- COMANDI BOT ----------------
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👮 Bot attivo. Usa /inizio per iniziare il turno.")
 
 
 async def inizio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"Turno: {get_turno()}\nSeleziona il mezzo:",
+        f"Turno attivo: {get_turno()}\nSeleziona il mezzo:",
         reply_markup=ReplyKeyboardMarkup(mezzi, resize_keyboard=True, one_time_keyboard=True),
     )
     return MEZZO
 
 
 async def scelta_mezzo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    user_data[user_id] = {"mezzo": update.message.text}
+    context.user_data["mezzo"] = update.message.text
 
     await update.message.reply_text(
         "Sei Capo Pattuglia o Autista?",
@@ -63,14 +92,36 @@ async def scelta_mezzo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def scelta_ruolo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    user_data[user_id]["ruolo"] = update.message.text
+    context.user_data["ruolo"] = update.message.text
 
     await update.message.reply_text(
-        "📍 Ora condividi la posizione in tempo reale nel gruppo."
+        "📍 Ora attiva la 'Posizione in tempo reale' nel gruppo (6 ore)."
     )
     return ConversationHandler.END
 
+
+# ---------------- TRACKING GPS ----------------
+
+async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    loc = update.message.location
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO positions (user_id, lat, lon)
+        VALUES (%s, %s, %s)
+    """, (user_id, loc.latitude, loc.longitude))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    await update.message.reply_text("📍 Posizione salvata")
+
+
+# ---------------- APP ----------------
 
 app = Application.builder().token(TOKEN).build()
 
@@ -85,18 +136,8 @@ conv_handler = ConversationHandler(
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(conv_handler)
+app.add_handler(MessageHandler(filters.LOCATION, location_handler))
+
+init_db()
 
 app.run_polling()
-from telegram.ext import MessageHandler, filters
-
-positions = {}  # {user_id: (lat, lon)}
-
-async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    loc = update.message.location
-
-    positions[user_id] = (loc.latitude, loc.longitude)
-
-    await update.message.reply_text("📍 Posizione aggiornata in tempo reale")
-
-app.add_handler(MessageHandler(filters.LOCATION, location_handler))
